@@ -36,7 +36,7 @@ require 'json'
 
 class CheckPingdomAggregates < Sensu::Plugin::Check::CLI
   option :user,
-         short: '-u EMAIL',
+         short: '-u USER',
          required: true
   option :password,
          short: '-p PASSWORD',
@@ -45,6 +45,14 @@ class CheckPingdomAggregates < Sensu::Plugin::Check::CLI
          short: '-k APP_KEY',
          long: '--application-key APP_KEY',
          required: true
+
+  option :tags,
+         short: '-T tags',
+         default: '',
+         required: false
+
+  option :account_email,
+         short: '-e EMAIL'
 
   option :warn,
          short: '-w COUNT',
@@ -59,7 +67,8 @@ class CheckPingdomAggregates < Sensu::Plugin::Check::CLI
 
   option :timeout,
          short: '-t SECS',
-         default: 10
+         default: 10,
+         proc: proc(&:to_i)
   option :verbose,
          short: '-v'
 
@@ -77,7 +86,7 @@ class CheckPingdomAggregates < Sensu::Plugin::Check::CLI
 
   def details
     return nil unless config[:verbose]
-    ":\n#{down_checks.map { |check| "#{check[:name]} is down" }.join("\n")}"
+    ":\n#{ down_checks.map { |check| "#{check[:name]} is down" }.join("\n") }"
   end
 
   def down_checks
@@ -86,14 +95,27 @@ class CheckPingdomAggregates < Sensu::Plugin::Check::CLI
   end
 
   def api_call
-    resource = RestClient::Resource.new(
-      'https://api.pingdom.com/api/2.0/checks',
-      user: config[:user],
-      password: config[:password],
-      headers: { 'App-Key' => config[:application_key] },
-      timeout: config[:timeout]
-    )
-    JSON.parse(resource.get, symbolize_names: true)
+
+    if config[:account_email]
+      resource = RestClient::Resource.new(
+        'https://api.pingdom.com/api/2.0/checks',
+        user: config[:user],
+        password: config[:password],
+        headers: { 'App-Key' => config[:application_key], 'Account-Email' => config[:account_email] },
+        timeout: config[:timeout]
+      )
+    else
+      resource = RestClient::Resource.new(
+        'https://api.pingdom.com/api/2.0/checks',
+        user: config[:user],
+        password: config[:password],
+        headers: { 'App-Key' => config[:application_key] },
+        timeout: config[:timeout]
+      )
+    end
+#    RestClient.log = 'stdout'
+    JSON.parse(resource.get(params: { tags: config[:tags] }), symbolize_names: true)
+#    print resource.get(params: { tags: config[:tags] })
 
   rescue RestClient::RequestTimeout
     warning 'Connection timeout'
